@@ -504,9 +504,9 @@ async def start(message: Message):
         welcome_text += "⚙️ *Команды администратора:*\n"
         admin_commands = [
             # Удалены /setrank, /setname, /setwork, /setage, /setinventory, /setbio, /wanted, /unwanted, /reset, /newevent
-            "/addadmin @username", # Не реализована в коде, но была в списке
-            "/removeadmin @username", # Не реализована в коде, но была в списке
-            "/admins", # Не реализована в коде, но была в списке
+            "/addadmin @username",  # Не реализована в коде, но была в списке
+            "/removeadmin @username",  # Не реализована в коде, но была в списке
+            "/admins",  # Не реализована в коде, но была в списке
             "/warn @user причина",
             "/unwarn @user",
             "/warns @user",
