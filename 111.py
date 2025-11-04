@@ -1,11 +1,13 @@
 from typing import Any
-
 import asyncio
 from aiogram.types import ChatPermissions
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import Message, User, Chat
+
+# Импортируем наш "будильник" (keep_alive.py)
+from keep_alive import keep_alive
 
 TOKEN = '8090773665:AAEgc4TLBnAPAGP8N5p_G10sIDbksjas_as'
 ADMIN_IDS: Any = 6056422825, 7466673069  # Ваш ID администратора
@@ -17,7 +19,7 @@ users = {}  # user_id: {"username": "", "balance": 0, "last_salary": None, "rank
 events = {}  # event_id: {"name": "", "participants": []}
 
 # Список администраторов
-admins = {ADMIN_IDS: True}
+admins = {6056422825: True, 7466673069: True}  # Используйте ADMIN_IDS напрямую
 
 # Система наказаний
 punishments = {
@@ -28,26 +30,10 @@ punishments = {
 
 # Структура с рангами и зарплатами (только цифры)
 RANKS = {
-    "1": 4000,
-    "2": 4200,
-    "3": 4500,
-    "4": 4700,
-    "5": 4800,
-    "6": 5000,
-    "7": 5200,
-    "8": 6000,
-    "9": 6200,
-    "10": 7000,
-    "11": 7100,
-    "12": 7800,
-    "13": 8000,
-    "14": 8700,
-    "15": 8800,
-    "16": 9000,
-    "17": 9700,
-    "18": 9800,
-    "19": 10000,
-    "20": 11000,
+    "1": 4000, "2": 4200, "3": 4500, "4": 4700, "5": 4800,
+    "6": 5000, "7": 5200, "8": 6000, "9": 6200, "10": 7000,
+    "11": 7100, "12": 7800, "13": 8000, "14": 8700, "15": 8800,
+    "16": 9000, "17": 9700, "18": 9800, "19": 10000, "20": 11000,
     "21": 11500
 }
 
@@ -67,8 +53,11 @@ def get_or_create_user(user: User):
             'inventory': "Пусто",
             'wanted': False,
             'bio': "Не указана",
-            'admin': user.id in admins
+            # Проверка администратора
+            'admin': user.id in ADMIN_IDS
         }
+    # Обновляем имя/ник при каждом вызове
+    users[user.id]["username"] = user.username or user.full_name or f"user_{user.id}"
     return user.id
 
 
@@ -89,7 +78,8 @@ async def check_chat_type(message: Message):
 
 @dp.message(Command("warn"))
 async def warn_user(message: Message):
-    if message.from_user.id not in admins:
+    # Проверка, что ID отправителя есть среди ID администраторов
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -116,6 +106,9 @@ async def warn_user(message: Message):
         # Добавляем варн
         if target_user_id not in punishments["warns"]:
             punishments["warns"][target_user_id] = []
+
+        # Создаем пользователя для админа, если его еще нет
+        get_or_create_user(message.from_user)
 
         punishments["warns"][target_user_id].append({
             "reason": reason,
@@ -187,7 +180,7 @@ async def ban_user_auto(message: Message, user_id: int, reason: str):
 
 @dp.message(Command("mute"))
 async def mute_user(message: Message):
-    if message.from_user.id not in admins:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -225,6 +218,9 @@ async def mute_user(message: Message):
         if not target_user_id:
             await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
+
+        # Создаем пользователя для админа, если его еще нет
+        get_or_create_user(message.from_user)
 
         # Устанавливаем мут
         punishments["mutes"][target_user_id] = {
@@ -272,7 +268,7 @@ async def mute_user(message: Message):
 
 @dp.message(Command("unmute"))
 async def unmute_user(message: Message):
-    if message.from_user.id not in admins:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -323,6 +319,9 @@ async def unmute_user(message: Message):
         except Exception as e:
             print(f"Ошибка при размуте пользователя: {e}")
 
+        # Создаем пользователя для админа, если его еще нет
+        get_or_create_user(message.from_user)
+
         await message.answer(f"🔊 *Мут снят с @{users[target_user_id]['username']}!*\n\n"
                              f"📌 *Причина мута:* {removed_mute['reason']}\n"
                              f"👮 *Администратор:* @{users[message.from_user.id]['username']}",
@@ -337,7 +336,7 @@ async def unmute_user(message: Message):
 
 @dp.message(Command("ban"))
 async def ban_user(message: Message):
-    if message.from_user.id not in admins:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -383,6 +382,9 @@ async def ban_user(message: Message):
         except Exception as e:
             print(f"Ошибка при бане пользователя: {e}")
 
+        # Создаем пользователя для админа, если его еще нет
+        get_or_create_user(message.from_user)
+
         await message.answer(f"⛔ *Пользователь @{users[target_user_id]['username']} забанен!*\n\n"
                              f"📌 *Причина:* {reason}\n"
                              f"👮 *Администратор:* @{users[message.from_user.id]['username']}",
@@ -397,7 +399,7 @@ async def ban_user(message: Message):
 
 @dp.message(Command("unban"))
 async def unban_user(message: Message):
-    if message.from_user.id not in admins:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -438,6 +440,9 @@ async def unban_user(message: Message):
         except Exception as e:
             print(f"Ошибка при разбане пользователя: {e}")
 
+        # Создаем пользователя для админа, если его еще нет
+        get_or_create_user(message.from_user)
+
         await message.answer(f"✅ *Бан снят с @{users[target_user_id]['username']}!*\n\n"
                              f"📌 *Причина бана:* {removed_ban['reason']}\n"
                              f"👮 *Администратор:* @{users[message.from_user.id]['username']}",
@@ -453,38 +458,14 @@ async def unban_user(message: Message):
 # ==================== ОСНОВНЫЕ КОМАНДЫ ====================
 
 
-# В вашем хендлере вызывайте эту функцию вместо одного сообщения с длинным текстом
-
-
 @dp.message(Command("start"))
 async def start_command(message: Message):
     # Проверяем тип чата (чтобы бот работал только в группах)
     if not await check_chat_type(message):
         return
 
-    user_id = message.from_user.id
-    user = message.from_user
-
-    # Добавляем/обновляем пользователя в базе
-    get_or_create_user(user)
-
-    # Формируем приветственное сообщение
-    welcome_text = (
-        f"👋 Добро пожаловать в *Outagamie County RolePlay*, {user.full_name}!\n\n"
-        "🔹 Вы успешно зарегистрированы в системе.\n"
-        "🔹 Для просмотра доступных команд используйте /help\n\n"
-        "Приятной игры! 🚔🏙️"
-    )
-
-    await message.answer(welcome_text, parse_mode="Markdown")
-
-
-@dp.message(Command("start"))
-async def start(message: Message):
-    if not await check_chat_type(message):
-        return
-
     user_id = get_or_create_user(message.from_user)
+    user = users[user_id]
 
     def escape_markdown_v2(text):
         special_chars = r"\_*[]()~`>#+-=|{}.!"
@@ -494,48 +475,24 @@ async def start(message: Message):
 
     # Обрабатываем имя пользователя или никнейм
     username_or_fullname = message.from_user.username or message.from_user.full_name
-    escaped_username_or_fullname = escape_markdown_v2(username_or_fullname)
+    # Используем исходное имя/ник, так как в профиле мы его выводим так
 
-    # Формируем приветственный текст
-    welcome_text = f"✨ *Добро пожаловать, {escaped_username_or_fullname}!* ✨\n\n"
+    # Формируем приветственное сообщение
+    welcome_text = (
+        f"👋 Добро пожаловать в *Outagamie County RolePlay*, {user['username']}!\n\n"
+        "🔹 Вы успешно зарегистрированы в системе.\n"
+        "🔹 Для просмотра доступных команд используйте /help\n\n"
+        "Приятной игры! 🚔🏙️"
+    )
 
-    # Если пользователь — админ, добавляем раздел с командами администратора
-    if message.from_user.id in admins:
-        welcome_text += "⚙️ *Команды администратора:*\n"
-        admin_commands = [
-            "/setrank @username номер_ранга",
-            "/setname @username новое_имя",
-            "/setwork @username работа",
-            "/setage @username возраст",
-            "/setinventory @username текст",
-            "/setbio @username текст",
-            "/wanted @username",
-            "/unwanted @username",
-            "/reset @username",
-            "/newevent название",
-            "/addadmin @username",
-            "/removeadmin @username",
-            "/admins",
-            "/warn @user причина",
-            "/unwarn @user",
-            "/warns @user",
-            "/mute @user время причина",
-            "/unmute @user",
-            "/ban @user причина",
-            "/unban @user"
-        ]
-        for cmd in admin_commands:
-            welcome_text += f"{cmd}\n"
-        welcome_text += "\n"
-
-    # Общие
+    await message.answer(welcome_text, parse_mode="Markdown")
 
 
 # ==================== СИСТЕМА СОБЫТИЙ ====================
 
 @dp.message(Command("newevent"))
 async def new_event(message: Message):
-    if message.from_user.id not in admins:
+    if message.from_user.id not in ADMIN_IDS:
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -627,7 +584,8 @@ async def list_events(message: Message):
 
 @dp.message(Command("eventinfo"))
 async def event_info(message: Message):
-    if message.from_user.id not in admins:
+    # Проверка прав администратора
+    if not any(message.from_user.id == admin_id for admin_id in ADMIN_IDS):
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -666,7 +624,8 @@ async def event_info(message: Message):
 
 @dp.message(Command("startevent"))
 async def start_event(message: Message):
-    if message.from_user.id not in admins:
+    # Проверка прав администратора
+    if not any(message.from_user.id == admin_id for admin_id in ADMIN_IDS):
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -828,7 +787,8 @@ async def profile(message: Message):
 
 @dp.message(Command("setadmin"))
 async def set_admin(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    # Проверяем, что ID отправителя - главный администратор (первый в кортеже)
+    if message.from_user.id != ADMIN_IDS[0]:
         await message.answer("❌ *Эта команда только для главного администратора!*", parse_mode="Markdown")
         return
 
@@ -852,13 +812,19 @@ async def set_admin(message: Message):
             await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
-        if target_user_id == ADMIN_ID:
+        if target_user_id == ADMIN_IDS[0]:
             await message.answer("⚠️ *Это главный администратор!*", parse_mode="Markdown")
             return
 
+        # Создаем пользователя, если его нет
+        get_or_create_user(message.from_user)
+        get_or_create_user(types.User(id=target_user_id, is_bot=False, first_name=users[target_user_id]['username']))
+
         # Устанавливаем/снимаем админ-права
-        users[target_user_id]['admin'] = not users[target_user_id]['admin']
-        status = "назначен администратором" if users[target_user_id]['admin'] else "снят с должности администратора"
+        current_status = users[target_user_id].get('admin', False)
+        new_status = not current_status
+        users[target_user_id]['admin'] = new_status
+        status = "назначен администратором" if new_status else "снят с должности администратора"
 
         await message.answer(f"✅ *Пользователь @{users[target_user_id]['username']} {status}!*", parse_mode="Markdown")
 
@@ -870,7 +836,8 @@ async def set_admin(message: Message):
 
 @dp.message(Command("setrank"))
 async def set_rank(message: Message):
-    if not users.get(message.from_user.id, {}).get('admin', False) and message.from_user.id != ADMIN_IDS:
+    # Проверка, что отправитель - администратор (есть в списке ADMIN_IDS)
+    if not any(message.from_user.id == admin_id for admin_id in ADMIN_IDS):
         await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
         return
 
@@ -930,8 +897,8 @@ async def set_rank(message: Message):
 
 @dp.message(Command("setname"))
 async def set_username(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -955,29 +922,32 @@ async def set_username(message: Message):
             similar_users = [u for u in users.values() if username in u["username"].lower()]
             if similar_users:
                 suggestions = "\n".join([f"- @{u['username']}" for u in similar_users[:3]])
-                await message.answer(f"❌ Точного совпадения не найдено. Возможно вы имели в виду:\n{suggestions}")
+                await message.answer(
+                    f"❌ *Точного совпадения не найдено.*\n\n*Возможно вы имели в виду:*\n{suggestions}",
+                    parse_mode="Markdown")
             else:
-                await message.answer("❌ Пользователь не найден. Убедитесь, что пользователь писал /start боту")
+                await message.answer("❌ *Пользователь не найден. Убедитесь, что пользователь писал /start боту*",
+                                     parse_mode="Markdown")
             return
 
         # Обновляем имя пользователя
         old_name = users[target_user_id]['username']
         users[target_user_id]['username'] = new_name
 
-        await message.answer(f"✅ Имя пользователя успешно изменено!\n"
+        await message.answer(f"✅ *Имя пользователя успешно изменено!*\n"
                              f"Старое имя: @{old_name}\n"
-                             f"Новое имя: @{new_name}")
+                             f"Новое имя: {new_name}", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /setname @username НовоеИмя\n"
-                             f"Пример: /setname @user НовоеИмяПользователя")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /setname @username НовоеИмя\n"
+                             f"🔹 Пример: /setname @user НовоеИмяПользователя", parse_mode="Markdown")
 
 
 @dp.message(Command("setwork"))
 async def set_work(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -997,23 +967,24 @@ async def set_work(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Устанавливаем работу
         users[target_user_id]['work'] = work_text
-        await message.answer(f"✅ Работа для @{users[target_user_id]['username']} установлена: {work_text}")
+        await message.answer(f"✅ *Работа для @{users[target_user_id]['username']} установлена:* {work_text}",
+                             parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /setwork @username ТекстРаботы\n"
-                             f"Пример: /setwork @user Повар в ресторане")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /setwork @username ТекстРаботы\n"
+                             f"🔹 Пример: /setwork @user Повар в ресторане", parse_mode="Markdown")
 
 
 @dp.message(Command("setage"))
 async def set_age(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -1031,7 +1002,7 @@ async def set_age(message: Message):
             if age <= 0 or age > 150:
                 raise ValueError
         except ValueError:
-            await message.answer("❌ Возраст должен быть числом от 1 до 150")
+            await message.answer("❌ *Возраст должен быть числом от 1 до 150*", parse_mode="Markdown")
             return
 
         # Поиск пользователя по username
@@ -1042,23 +1013,24 @@ async def set_age(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Устанавливаем возраст
         users[target_user_id]['age'] = age
-        await message.answer(f"✅ Возраст для @{users[target_user_id]['username']} установлен: {age}")
+        await message.answer(f"✅ *Возраст для @{users[target_user_id]['username']} установлен:* {age}",
+                             parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /setage @username Возраст\n"
-                             f"Пример: /setage @user 25")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /setage @username Возраст\n"
+                             f"🔹 Пример: /setage @user 25", parse_mode="Markdown")
 
 
 @dp.message(Command("setinventory"))
 async def set_inventory(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -1078,17 +1050,18 @@ async def set_inventory(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Устанавливаем список владения
         users[target_user_id]['inventory'] = inventory_text
-        await message.answer(f"✅ Список владения для @{users[target_user_id]['username']} обновлен")
+        await message.answer(f"✅ *Список владения для @{users[target_user_id]['username']} обновлен*",
+                             parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /setinventory @username Текст\n"
-                             f"Пример: /setinventory @user Дом, машина, оружие")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /setinventory @username Текст\n"
+                             f"🔹 Пример: /setinventory @user Дом, машина, оружие", parse_mode="Markdown")
 
 
 @dp.message(Command("inventory"))
@@ -1109,19 +1082,19 @@ async def view_inventory(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
     else:
         target_user_id = get_or_create_user(message.from_user)
 
     user = users[target_user_id]
-    await message.answer(f"📦 Список владения @{user['username']}:\n{user['inventory']}")
+    await message.answer(f"📦 *Список владения @{user['username']}:*\n{user['inventory']}", parse_mode="Markdown")
 
 
 @dp.message(Command("wanted"))
 async def set_wanted(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -1141,23 +1114,23 @@ async def set_wanted(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Устанавливаем статус "в розыске"
         users[target_user_id]['wanted'] = True
-        await message.answer(f"🔴 @{users[target_user_id]['username']} объявлен(а) в розыск!")
+        await message.answer(f"🔴 *@{users[target_user_id]['username']} объявлен(а) в розыск!*", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /wanted @username\n"
-                             f"Пример: /wanted @user")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /wanted @username\n"
+                             f"🔹 Пример: /wanted @user", parse_mode="Markdown")
 
 
 @dp.message(Command("unwanted"))
 async def set_unwanted(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -1177,23 +1150,23 @@ async def set_unwanted(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Снимаем статус "в розыске"
         users[target_user_id]['wanted'] = False
-        await message.answer(f"✅ @{users[target_user_id]['username']} снят(а) с розыска!")
+        await message.answer(f"✅ *@{users[target_user_id]['username']} снят(а) с розыска!*", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /unwanted @username\n"
-                             f"Пример: /unwanted @user")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /unwanted @username\n"
+                             f"🔹 Пример: /unwanted @user", parse_mode="Markdown")
 
 
 @dp.message(Command("setbio"))
 async def set_bio(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -1213,17 +1186,17 @@ async def set_bio(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Устанавливаем биографию
         users[target_user_id]['bio'] = bio_text
-        await message.answer(f"✅ Биография для @{users[target_user_id]['username']} обновлена")
+        await message.answer(f"✅ *Биография для @{users[target_user_id]['username']} обновлена*", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /setbio @username Текст\n"
-                             f"Пример: /setbio @user Родился в Москве, работает врачом")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /setbio @username Текст\n"
+                             f"🔹 Пример: /setbio @user Родился в Москве, работает врачом", parse_mode="Markdown")
 
 
 @dp.message(Command("bio"))
@@ -1244,19 +1217,19 @@ async def view_bio(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
     else:
         target_user_id = get_or_create_user(message.from_user)
 
     user = users[target_user_id]
-    await message.answer(f"📖 Биография @{user['username']}:\n{user['bio']}")
+    await message.answer(f"📖 *Биография @{user['username']}:*\n{user['bio']}", parse_mode="Markdown")
 
 
 @dp.message(Command("reset"))
 async def reset_user(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("❌ Эта команда только для администратора")
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ *Эта команда только для администратора*", parse_mode="Markdown")
         return
 
     try:
@@ -1276,7 +1249,7 @@ async def reset_user(message: Message):
                 break
 
         if not target_user_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         # Сбрасываем данные пользователя (кроме username)
@@ -1291,12 +1264,13 @@ async def reset_user(message: Message):
             'bio': "Не указана"
         })
 
-        await message.answer(f"✅ Данные пользователя @{users[target_user_id]['username']} сброшены!")
+        await message.answer(f"✅ *Данные пользователя @{users[target_user_id]['username']} сброшены!*",
+                             parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /reset @username\n"
-                             f"Пример: /reset @user")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /reset @username\n"
+                             f"🔹 Пример: /reset @user", parse_mode="Markdown")
 
 
 @dp.message(Command("pay"))
@@ -1315,7 +1289,7 @@ async def pay_money(message: Message):
             if amount <= 0:
                 raise ValueError
         except ValueError:
-            await message.answer("❌ Сумма должна быть положительным числом")
+            await message.answer("❌ *Сумма должна быть положительным числом*", parse_mode="Markdown")
             return
 
         sender_id = get_or_create_user(message.from_user)
@@ -1328,28 +1302,28 @@ async def pay_money(message: Message):
                 break
 
         if not receiver_id:
-            await message.answer("❌ Пользователь не найден.")
+            await message.answer("❌ *Пользователь не найден.*", parse_mode="Markdown")
             return
 
         if sender_id == receiver_id:
-            await message.answer("❌ Нельзя перевести деньги самому себе")
+            await message.answer("❌ *Нельзя перевести деньги самому себе*", parse_mode="Markdown")
             return
 
         if users[sender_id]['balance'] < amount:
-            await message.answer("❌ Недостаточно средств на балансе")
+            await message.answer("❌ *Недостаточно средств на балансе*", parse_mode="Markdown")
             return
 
         # Совершаем перевод
         users[sender_id]['balance'] -= amount
         users[receiver_id]['balance'] += amount
 
-        await message.answer(f"✅ Вы перевели {amount}💰 пользователю @{users[receiver_id]['username']}\n"
-                             f"Ваш новый баланс: {users[sender_id]['balance']}💰")
+        await message.answer(f"✅ *Вы перевели {amount}💰 пользователю @{users[receiver_id]['username']}*\n"
+                             f"Ваш новый баланс: {users[sender_id]['balance']}💰", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /pay @username Сумма\n"
-                             f"Пример: /pay @user 1000")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /pay @username Сумма\n"
+                             f"🔹 Пример: /pay @user 1000", parse_mode="Markdown")
 
 
 @dp.message(Command("payamount"))
@@ -1367,37 +1341,38 @@ async def pay_amount(message: Message):
             if amount <= 0:
                 raise ValueError
         except ValueError:
-            await message.answer("❌ Сумма должна быть положительным числом")
+            await message.answer("❌ *Сумма должна быть положительным числом*", parse_mode="Markdown")
             return
 
         user_id = get_or_create_user(message.from_user)
 
         if users[user_id]['balance'] < amount:
-            await message.answer("❌ Недостаточно средств на балансе")
+            await message.answer("❌ *Недостаточно средств на балансе*", parse_mode="Markdown")
             return
 
         # Снимаем деньги
         users[user_id]['balance'] -= amount
 
-        await message.answer(f"✅ С вашего счета списано {amount}💰\n"
-                             f"Ваш новый баланс: {users[user_id]['balance']}💰")
+        await message.answer(f"✅ *С вашего счета списано {amount}💰*\n"
+                             f"Ваш новый баланс: {users[user_id]['balance']}💰", parse_mode="Markdown")
 
     except Exception as e:
-        await message.answer("❌ Неправильный формат команды\n\n"
-                             f"Используйте: /payamount Сумма\n"
-                             f"Пример: /payamount 500")
+        await message.answer("❌ *Неправильный формат команды*\n\n"
+                             f"🔹 Используйте: /payamount Сумма\n"
+                             f"🔹 Пример: /payamount 500", parse_mode="Markdown")
 
 
 @dp.message(Command("help"))
 async def show_help(message: Message):
-    help_text = "🆘 *Помощь по командам*\n\n"
-
     user_id = get_or_create_user(message.from_user)
-    is_admin = users[user_id].get('admin', False) or message.from_user.id == ADMIN_IDS
+    # Проверка, что ID отправителя - администратор (есть в списке ADMIN_IDS)
+    is_admin = any(user_id == admin_id for admin_id in ADMIN_IDS) or users[user_id].get('admin', False)
+
+    help_text = "🆘 *Помощь по командам*\n\n"
 
     if is_admin:
         help_text += "⚙️ *Команды администратора:*\n"
-        help_text += "🔹 /setadmin @ник - назначить администратора\n"
+        help_text += "🔹 /setadmin @ник - назначить/снять администратора (Главный админ)\n"
         help_text += "🔹 /setrank @ник номер - установить ранг\n"
         help_text += "🔹 /setname @ник имя - изменить имя\n"
         help_text += "🔹 /setwork @ник работа - установить работу\n"
@@ -1409,105 +1384,27 @@ async def show_help(message: Message):
         help_text += "🔹 /reset @ник - сбросить данные\n"
         help_text += "🔹 /newevent название - создать событие\n"
         help_text += "🔹 /eventinfo номер - информация о событии\n"
-        help_text += "🔹 /startevent номер - начать событие\n\n"
+        help_text += "🔹 /startevent номер - начать событие\n"
+        help_text += "🔹 /warn @user причина - выдать предупреждение\n"
+        help_text += "🔹 /mute @user время причина - выдать мут\n"
+        help_text += "🔹 /unmute @user - снять мут\n"
+        help_text += "🔹 /ban @user причина - забанить\n"
+        help_text += "🔹 /unban @user - разбанить\n\n"
 
     help_text += "👥 *Общие команды:*\n"
+    help_text += "🔹 /start - приветствие и регистрация\n"
     help_text += "🔹 /profile [@ник] - посмотреть профиль\n"
     help_text += "🔹 /leaders - топ игроков\n"
     help_text += "🔹 /getsalary - получить зарплату\n"
     help_text += "🔹 /pay @ник сумма - перевести деньги\n"
-    help_text += "🔹 /payamount сумма - оплатить сумму\n"
-    help_text += "🔹 /inventory @ник - посмотреть инвентарь\n"
-    help_text += "🔹 /bio @ник - посмотреть биографию\n"
-    help_text += "🔹 /joinevent номер - записаться на событие\n\n"
+    help_text += "🔹 /payamount сумма - оплатить сумму (снять с себя)\n"
+    help_text += "🔹 /inventory [@ник] - посмотреть инвентарь\n"
+    help_text += "🔹 /bio [@ник] - посмотреть биографию\n"
+    help_text += "🔹 /joinevent номер - записаться на событие\n"
+    help_text += "🔹 /events - список активных событий\n\n"
     help_text += "📌 Для уточнения по командам обращайтесь к администрации."
 
     await message.answer(help_text, parse_mode="Markdown")
-
-
-@dp.message(Command("eventinfo"))
-async def event_info(message: Message):
-    if not users.get(message.from_user.id, {}).get('admin', False) and message.from_user.id != ADMIN_ID:
-        await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
-        return
-
-    try:
-        # Формат команды: /eventinfo номер_события
-        parts = message.text.split()
-        if len(parts) < 2:
-            raise ValueError
-
-        _, event_id_str = parts
-
-        try:
-            event_id = int(event_id_str)
-        except ValueError:
-            await message.answer("❌ *Номер события должен быть числом*", parse_mode="Markdown")
-            return
-
-        if event_id not in events:
-            await message.answer("❌ *Событие с таким номером не найдено*", parse_mode="Markdown")
-            return
-
-        event = events[event_id]
-        participants_text = "\n".join([f"🔹 @{users[uid]['username']}" for uid in event['participants']]) if event[
-            'participants'] else "Нет участников"
-
-        await message.answer(f"📋 *Информация о событии #{event_id}*\n\n"
-                             f"🏷️ *Название:* {event['name']}\n"
-                             f"👥 *Участники ({len(event['participants'])}):*\n{participants_text}",
-                             parse_mode="Markdown")
-
-    except Exception as e:
-        await message.answer("❌ *Неправильный формат команды*\n\n"
-                             "🔹 Используйте: /eventinfo номер\n"
-                             "🔹 Пример: /eventinfo 1", parse_mode="Markdown")
-
-
-@dp.message(Command("startevent"))
-async def start_event(message: Message):
-    if not users.get(message.from_user.id, {}).get('admin', False) and message.from_user.id != ADMIN_ID:
-        await message.answer("❌ *Эта команда только для администратора!*", parse_mode="Markdown")
-        return
-
-    try:
-        # Формат команды: /startevent номер_события
-        parts = message.text.split()
-        if len(parts) < 2:
-            raise ValueError
-
-        _, event_id_str = parts
-
-        try:
-            event_id = int(event_id_str)
-        except ValueError:
-            await message.answer("❌ *Номер события должен быть числом*", parse_mode="Markdown")
-            return
-
-        if event_id not in events:
-            await message.answer("❌ *Событие с таким номером не найдено*", parse_mode="Markdown")
-            return
-
-        event = events[event_id]
-
-        if not event['participants']:
-            await message.answer("⚠️ *Нет участников для начала события!*", parse_mode="Markdown")
-            return
-
-        participants_text = "\n".join([f"🔹 @{users[uid]['username']}" for uid in event['participants']])
-
-        # Удаляем событие после начала
-        del events[event_id]
-
-        await message.answer(f"🚀 *Событие #{event_id} начато!*\n\n"
-                             f"🏷️ *Название:* {event['name']}\n"
-                             f"👥 *Участники:*\n{participants_text}\n\n"
-                             f"🏁 *Администратор может начать розыгрыш!*", parse_mode="Markdown")
-
-    except Exception as e:
-        await message.answer("❌ *Неправильный формат команды*\n\n"
-                             "🔹 Используйте: /startevent номер\n"
-                             "🔹 Пример: /startevent 1", parse_mode="Markdown")
 
 
 @dp.message()
@@ -1516,13 +1413,14 @@ async def handle_unknown_command(message: Message):
         # Получаем команду (первое слово после /)
         command = message.text.split()[0][1:].lower()
 
-        # Список всех доступных команд
+        # Список всех доступных команд (для поиска похожих)
         available_commands = [
             'start', 'help', 'profile', 'leaders', 'getsalary',
-            'pay', 'payamount', 'inventory', 'bio'
-                                             'joinevent', 'setadmin', 'setrank', 'setname', 'setwork',
+            'pay', 'payamount', 'inventory', 'bio', 'joinevent',
+            'events', 'setadmin', 'setrank', 'setname', 'setwork',
             'setage', 'setinventory', 'setbio', 'wanted', 'unwanted',
-            'reset', 'newevent', 'eventinfo', 'startevent'
+            'reset', 'newevent', 'eventinfo', 'startevent',
+            'warn', 'unwarn', 'warns', 'mute', 'unmute', 'ban', 'unban'
         ]
 
         # Ищем похожие команды
@@ -1540,12 +1438,16 @@ async def handle_unknown_command(message: Message):
         await message.answer(reply, parse_mode="Markdown")
 
 
-# ... (остальные обработчики остаются без изменений, но нужно добавить parse_mode="Markdown" к ответам)
-
-
 async def main():
+    # Запуск Flask-сервера для Replit
+    keep_alive()
+
+    # Запуск бота в режиме Long Polling
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
